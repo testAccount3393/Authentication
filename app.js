@@ -5,6 +5,9 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 var mongoose = require('mongoose');
 var encrypt = require('mongoose-encryption');
+var md5 = require('md5');
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 const port = 3000;
@@ -22,16 +25,13 @@ mongoose.connect("mongodb://localhost:27017/userDB");
 //     password: String
 // };
 
-
-
 const userSchema = new mongoose.Schema ({
     email: String,
     password: String
 });
 
 const secret = "Thisisourlittlesecret.";
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ["password"] });
-
+//userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ["password"] });
 
 const User = new mongoose.model("User", userSchema);
 
@@ -48,16 +48,21 @@ app.get("/register", (req, res) => {
 });
 
 app.post("/register", (req, res) => {
-    const newUser = new User({
-        email: req.body.username,
-        password: req.body.password
+
+    bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+        const newUser = new User({
+            email: req.body.username,
+            password: hash
+        });
+    
+        newUser.save().then(() => {
+            res.render("secrets");
+        }).catch((error) => {
+            console.log(error);
+        });
     });
 
-    newUser.save().then(() => {
-        res.render("secrets");
-    }).catch((error) => {
-        console.log(error);
-    });
+    
 });
 
 app.post("/login", (req, res) => {
@@ -66,9 +71,11 @@ app.post("/login", (req, res) => {
 
     User.findOne({email: username}).then((foundUser) => {
         if(foundUser) {
-            if(foundUser.password === password) {
-                res.render("secrets");
-            }
+            bcrypt.compare(password, foundUser.password, function(err, result) {
+                if(result === true) {
+                    res.render("secrets");
+                }
+            });
         }
     }).catch((error) => {
         console.log(error);
